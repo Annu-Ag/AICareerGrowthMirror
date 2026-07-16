@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 const navigation = [
   { label: 'Profile', to: '/profile' },
@@ -8,9 +8,12 @@ const navigation = [
 ]
 
 export default function Layout() {
+  const { pathname } = useLocation()
+  const isLanding = pathname === '/'
+
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900">
-      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-[#f8fafc]/90 backdrop-blur-xl">
+    <div className={isLanding ? 'min-h-screen bg-[#0b0d0b]' : 'min-h-screen bg-[#f8fafc] text-slate-900'}>
+      {!isLanding && <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-[#f8fafc]/90 backdrop-blur-xl">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8" aria-label="Primary navigation">
           <NavLink to="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-slate-900">
             <span className="grid size-8 place-items-center rounded-xl bg-indigo-600 text-sm text-white shadow-sm">✦</span>
@@ -26,6 +29,7 @@ export default function Layout() {
           <NavLink to="/profile" className="rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-slate-700">My mirror</NavLink>
         </nav>
       </header>
+      }
       <main><Outlet /></main>
     </div>
   )

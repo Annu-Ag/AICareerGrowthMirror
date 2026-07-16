@@ -12,3 +12,11 @@ body {
 }
 
 #root { @apply min-h-screen; }
+
+.hero-grid {
+  background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 78%);
+}
+
+.landing svg { width: 22px; height: 22px; }
