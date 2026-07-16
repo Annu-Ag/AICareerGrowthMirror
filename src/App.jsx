@@ -1,11 +1,11 @@
 import { Route, Routes } from 'react-router-dom'
-import Layout from './components/Layout'
-import AIAnalysis from './pages/AIAnalysis'
-import CareerProfile from './pages/CareerProfile'
-import GrowthReport from './pages/GrowthReport'
+import Layout from './components/layout/Layout'
 import Landing from './pages/Landing'
-import NotFound from './pages/NotFound'
+import CareerProfile from './pages/CareerProfile'
+import AIAnalysis from './pages/AIAnalysis'
 import WeeklyCheckIn from './pages/WeeklyCheckIn'
+import GrowthReport from './pages/GrowthReport'
+import NotFound from './pages/NotFound'
 
 export default function App() {
   return (
