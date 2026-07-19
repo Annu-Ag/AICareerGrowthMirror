@@ -22,25 +22,23 @@ const moodMessages = {
   Energized: 'Channel that energy into one focused action.',
 }
 
-const ENERGY_PROMPTS = [
-  '⚡',
-  '💡',
-  '🌟',
-  '🎉',
-  '💪',
-  '🌈',
-  '✨',
-  '🔥',
-]
+const ENERGY_PROMPTS = ['⚡', '💡', '🌟', '🎉', '💪', '🌈', '✨', '🔥']
+
+// BUG-9: Show the current date
+function todayStr() {
+  return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+}
 
 export default function WeeklyCheckIn() {
   const { checkIn, setCheckIn, saveCheckIn, showToast, checkIns } = useCareer()
   const [saved, setSaved] = useState(false)
   const [promptEmoji, setPromptEmoji] = useState('⚡')
+  const [errors, setErrors] = useState({ mood: '', details: '' })
 
   function update(field, value) {
     setCheckIn((current) => ({ ...current, [field]: value }))
     setSaved(false)
+    setErrors((current) => ({ ...current, [field === 'mood' ? 'mood' : 'details']: '' }))
     if (field === 'energy') {
       setPromptEmoji(ENERGY_PROMPTS[Math.floor(Math.random() * ENERGY_PROMPTS.length)])
     }
@@ -48,6 +46,18 @@ export default function WeeklyCheckIn() {
 
   function save(event) {
     event.preventDefault()
+    const nextErrors = { mood: '', details: '' }
+    const hasMood = Boolean(checkIn.mood && checkIn.mood.trim())
+    const hasDetails = [checkIn.energy, checkIn.challenge].some((value) => (value || '').trim().length >= 10)
+
+    if (!hasMood) nextErrors.mood = 'Select how you’re feeling.'
+    if (!hasDetails) nextErrors.details = 'Share at least one reflection with 10+ characters.'
+
+    setErrors(nextErrors)
+    if (nextErrors.mood || nextErrors.details) {
+      return
+    }
+
     saveCheckIn(checkIn)
     setSaved(true)
     showToast('Reflection saved ✨', 'success')
@@ -70,6 +80,12 @@ export default function WeeklyCheckIn() {
           onSubmit={save}
           className="card p-6 sm:p-8 space-y-7"
         >
+          {/* BUG-9: Show current date */}
+          <div className="flex items-center gap-2 text-xs text-fg-muted pb-1 border-b border-border">
+            <span>📅</span>
+            <span>{todayStr()}</span>
+          </div>
+
           {/* AI check-in buddy */}
           <div className="flex items-center gap-4 mb-2 rounded-[12px] bg-accent-subtle/50 border border-accent/10 p-4">
             <AIAvatar size="sm" pulseColor="accent" />
@@ -110,9 +126,11 @@ export default function WeeklyCheckIn() {
                 {moodMessage}
               </p>
             )}
+            {errors.mood && <p className="mt-2 text-sm text-warning">{errors.mood}</p>}
           </fieldset>
 
-          <CheckInField
+          <div>
+            <CheckInField
             label="What gave you energy this week?"
             value={checkIn.energy}
             onChange={(e) => update('energy', e.target.value)}
@@ -120,13 +138,15 @@ export default function WeeklyCheckIn() {
             icon={promptEmoji}
           />
 
-          <CheckInField
-            label="What felt challenging?"
-            value={checkIn.challenge}
-            onChange={(e) => update('challenge', e.target.value)}
-            placeholder="Name it without trying to solve it yet."
-            icon="🧗"
-          />
+            <CheckInField
+              label="What felt challenging?"
+              value={checkIn.challenge}
+              onChange={(e) => update('challenge', e.target.value)}
+              placeholder="Name it without trying to solve it yet."
+              icon="🧗"
+            />
+            {errors.details && <p className="mt-2 text-sm text-warning">{errors.details}</p>}
+          </div>
 
           <div className="flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-fg-muted flex items-center gap-2" role="status">

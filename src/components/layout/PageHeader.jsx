@@ -1,4 +1,4 @@
-export default function PageHeader({ eyebrow, title, description, action, gradient }) {
+export default function PageHeader({ eyebrow, title, description, action }) {
   return (
     <div className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
       <div className="max-w-2xl">
@@ -9,9 +9,7 @@ export default function PageHeader({ eyebrow, title, description, action, gradie
           </p>
         )}
         <h1
-          className={`text-[28px] font-semibold leading-[1.15] tracking-[-0.02em] sm:text-[34px] ${
-            gradient ? 'gradient-text' : 'text-fg'
-          }`}
+          className="text-[28px] font-semibold leading-[1.15] tracking-[-0.02em] sm:text-[34px] text-fg"
         >
           {title}
         </h1>

@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../components/layout/PageHeader'
 import InsightCard from '../components/cards/InsightCard'
 import Tag from '../components/cards/Tag'
 import AIAvatar from '../components/AIAvatar'
 import { useCareer } from '../context/CareerContext'
+import { analyzeCareer, checkHealth } from '../services/api'
 import { generateMockAnalysis } from '../services/mockAnalysis'
+import { getMissingProfileFields, isProfileReadyForAnalysis } from '../utils/profileValidation'
 
-const analysisApiUrl = 'http://localhost:3001/analyze'
+const API_TIMEOUT_MS = 15000 // 15s timeout
 
 const FUN_REACTIONS = ['✨', '🧠', '🚀', '💡', '⭐', '🔮', '🎯', '🌈']
 
@@ -24,8 +26,30 @@ const LOADING_MESSAGES = [
 
 const LOADING_EMOJIS = ['🔍', '🧪', '🔬', '🤖', '💭', '🔮', '⚡', '🧩']
 
+function isValidAnalysis(data) {
+  if (!data || typeof data !== 'object') return false
+  if (typeof data.careerScore !== 'number' || data.careerScore < 0 || data.careerScore > 100) return false
+  if (!Array.isArray(data.strengths)) return false
+  if (!Array.isArray(data.skillGaps)) return false
+  if (!Array.isArray(data.hiddenBlockers)) return false
+  if (typeof data.nextExperiment !== 'string' || !data.nextExperiment.trim()) return false
+  if (typeof data.reasoning !== 'string' || !data.reasoning.trim()) return false
+  return true
+}
+
+function safeParseAnalysis(raw) {
+  try {
+    if (typeof raw === 'string') {
+      raw = JSON.parse(raw)
+    }
+    return raw
+  } catch {
+    return null
+  }
+}
+
 export default function AIAnalysis() {
-  const { profile, analysis, setAnalysis, showToast } = useCareer()
+  const { profile, analysis, setAnalysis, showToast, hasRealAnalysis, setHasRealAnalysis, trackExperiment, experimentTracking, checkIns } = useCareer()
   const [status, setStatus] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [loadMessage, setLoadMessage] = useState('')
@@ -33,9 +57,20 @@ export default function AIAnalysis() {
   const [apiMode, setApiMode] = useState(false)
   const [hoverReaction, setHoverReaction] = useState('')
   const [showSparkle, setShowSparkle] = useState(false)
+  const [showBlockerModal, setShowBlockerModal] = useState(false)
+  const [blockerInput, setBlockerInput] = useState('')
+  const abortRef = useRef(null)
+  const mountedRef = useRef(true)
 
-  const name = profile.name || 'your'
-  const hasProfile = profile.name.trim().length > 0
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (abortRef.current) {
+        abortRef.current.abort()
+      }
+    }
+  }, [])
 
   useEffect(() => {
     let interval
@@ -48,77 +83,189 @@ export default function AIAnalysis() {
     return () => clearInterval(interval)
   }, [isLoading])
 
-  async function runAnalysis() {
+  useEffect(() => {
+    let active = true
+    async function checkApi() {
+      try {
+        const health = await checkHealth()
+        if (!active) return
+        setApiMode(Boolean(health?.hasApiKey))
+      } catch {
+        if (active) {
+          setApiMode(false)
+        }
+      }
+    }
+
+    checkApi()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function fetchRealAnalysis(payload) {
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+
+    try {
+      const parsed = safeParseAnalysis(await analyzeCareer(payload))
+      clearTimeout(timeoutId)
+      abortRef.current = null
+
+      if (!parsed || !isValidAnalysis(parsed)) {
+        throw new Error('API returned an incomplete or malformed response')
+      }
+
+      return parsed
+    } catch (err) {
+      clearTimeout(timeoutId)
+      abortRef.current = null
+
+      if (err.name === 'AbortError') {
+        throw new Error('Request timed out after 15 seconds')
+      }
+      throw err
+    }
+  }
+
+  async function runAnalysis({ useCheckIns = false } = {}) {
+    if (isLoading) return // Prevent double clicks
+    if (!profileReady) {
+      setStatus('Complete your profile before generating an analysis.')
+      showToast('Complete your profile before generating an analysis.', 'warning')
+      return
+    }
+
     setIsLoading(true)
     setLoadMessage(LOADING_MESSAGES[0])
     setLoadEmoji(LOADING_EMOJIS[0])
     setStatus('')
 
     try {
-      if (process.env.NODE_ENV === 'development' && apiMode) {
-        const res = await fetch(analysisApiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(profile),
-        })
-        if (!res.ok) throw new Error(`API error: ${res.status}`)
-        const data = await res.json()
-        setAnalysis(data)
-        setStatus('✨ Analysis refreshed via AI.')
-        showToast('Analysis updated!', 'success')
+      let result
+      const payload = {
+        profile,
+        resumeText: profile.resumeText || '',
+        checkInHistory: useCheckIns ? checkIns.slice(-5) : [],
+      }
+
+      if (apiMode) {
+        try {
+          result = await fetchRealAnalysis(payload)
+          setHasRealAnalysis(true)
+          setStatus('✨ Live AI analysis generated successfully.')
+        } catch (err) {
+          const fallback = generateMockAnalysis(profile)
+          result = fallback
+          setHasRealAnalysis(false)
+          setStatus(`🔮 ${err.message}. Using offline demo fallback.`)
+          showToast('Live AI analysis unavailable — using offline demo fallback.', 'info')
+        }
       } else {
-        // Simulate varied delay
         const delay = 1800 + Math.random() * 1600
         await new Promise((r) => setTimeout(r, delay))
-        const fresh = generateMockAnalysis(profile)
-        setAnalysis(fresh)
-        setStatus('✨ Your analysis has been refreshed.')
-        showToast('Analysis refreshed!', 'success')
+        result = generateMockAnalysis(profile, false)
+        setHasRealAnalysis(false)
+        setStatus('🔮 Offline demo analysis generated locally.')
       }
+
+      if (!mountedRef.current) return
+
+      setAnalysis(result)
+      showToast('Analysis updated!', 'success')
     } catch (err) {
-      await new Promise((r) => setTimeout(r, 600))
-      const fresh = generateMockAnalysis(profile)
-      setAnalysis(fresh)
-      setStatus('🔮 Used local analysis (AI server unavailable).')
+      if (!mountedRef.current) return
+      // Last resort fallback
+      const fallback = generateMockAnalysis(profile)
+      setAnalysis(fallback)
+      setHasRealAnalysis(false)
+      setStatus('🔮 Used local analysis (unexpected error).')
       showToast('Using local analysis mode', 'info')
     }
 
-    setIsLoading(false)
+    if (mountedRef.current) {
+      setIsLoading(false)
+    }
   }
 
+  const name = profile.name || 'your'
+  const hasProfile = profile.name.trim().length > 0
+  const hasAnalysisData = analysis.careerScore > 0
+  const profileReady = isProfileReadyForAnalysis(profile)
+  const missingFields = getMissingProfileFields(profile)
+  const actionLabel = checkIns.length > 0 ? 'Re-analyze with check-ins' : hasAnalysisData ? 'Re-analyze' : 'Generate analysis'
+
   const reactionEmoji = FUN_REACTIONS[Math.floor(Math.random() * FUN_REACTIONS.length)]
+
+  function handleBlockerSubmit() {
+    trackExperiment(false, blockerInput.trim())
+    setBlockerInput('')
+    setShowBlockerModal(false)
+  }
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-12 sm:px-8 lg:py-16">
       <PageHeader
         eyebrow="AI analysis"
-        title={`A clearer view of ${name} career`}
-        description="A practical reflection designed to help you focus your energy where it can make the biggest difference."
+        title={hasAnalysisData ? `A clearer view of ${name}'s career` : 'Your career analysis'}
+        description={
+          hasAnalysisData
+            ? 'A practical reflection designed to help you focus your energy where it can make the biggest difference.'
+            : 'Complete your profile first, then generate a personalized career analysis.'
+        }
         action={
           <div className="flex items-center gap-3">
+            <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] ${hasRealAnalysis ? 'bg-success-bg text-success' : 'bg-warning-bg text-warning'}`}>
+              {hasRealAnalysis ? 'Live AI' : 'Offline demo'}
+            </span>
             <button
               type="button"
-              onClick={runAnalysis}
-              disabled={isLoading}
+              onClick={() => runAnalysis({ useCheckIns: true })}
+              disabled={isLoading || !profileReady}
               className={`btn-primary-gradient relative overflow-hidden ${isLoading ? 'opacity-70 cursor-wait' : ''}`}
               onMouseEnter={() => setHoverReaction(reactionEmoji)}
               onMouseLeave={() => setHoverReaction('')}
             >
               {isLoading ? (
                 <>
-                  <AIAvatar size="sm" isThinking pulseColor="accent" />
+                  <span className="spinner size-4 border-2 border-white/30 border-t-white rounded-full" />
                   <span className="ml-1">Analyzing</span>
                 </>
               ) : (
                 <>
                   <span className="float-emoji">{hoverReaction || '🔮'}</span>
-                  Refresh analysis
+                  {actionLabel}
                 </>
               )}
             </button>
           </div>
         }
       />
+
+      {showBlockerModal && (
+        <div className="mb-6 rounded-[12px] border border-border bg-white/70 p-4 shadow-sm backdrop-blur">
+          <label className="block text-sm font-semibold text-fg" htmlFor="blocker-note">
+            What got in the way of this experiment?
+          </label>
+          <textarea
+            id="blocker-note"
+            value={blockerInput}
+            onChange={(event) => setBlockerInput(event.target.value)}
+            className="input-base mt-2 min-h-24"
+            placeholder="Optional note for your reflection"
+          />
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button type="button" className="btn-primary-gradient text-xs" onClick={handleBlockerSubmit}>
+              Save blocker
+            </button>
+            <button type="button" className="btn-ghost text-xs" onClick={() => { setBlockerInput(''); setShowBlockerModal(false) }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* AI loading experience */}
       {isLoading && (
@@ -134,23 +281,59 @@ export default function AIAnalysis() {
                 <span className="size-1.5 rounded-full bg-accent pulse-dot" />
                 AI is processing your career data
               </div>
+              {apiMode && (
+                <p className="mt-2 text-[10px] text-fg-muted">Using live AI API — may take up to 15s</p>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Status banner */}
+      {profileReady ? null : (
+        <div className="mb-6 rounded-[12px] border border-warning/20 bg-warning-bg p-4 text-sm text-warning">
+          <p className="font-semibold">Complete your profile before generating AI analysis</p>
+          <ul className="mt-2 list-disc pl-5">
+            {missingFields.length > 0 ? missingFields.map((field) => <li key={field}>{field}</li>) : <li>Fill in the remaining fields.</li>}
+          </ul>
+        </div>
+      )}
+
+      {/* Status banner — shows fallback / live mode info */}
       {status && !isLoading && (
         <p
           role="status"
-          className="mb-6 glass-card rounded-[12px] px-4 py-3 text-sm text-fg-secondary flex items-center gap-2 thought-appear"
+          className={`mb-6 rounded-[12px] px-4 py-3 text-sm flex items-center gap-2 thought-appear ${
+            hasRealAnalysis ? 'glass-card text-fg-secondary' : 'border border-warning/20 bg-warning-bg text-warning'
+          }`}
         >
+          {!hasRealAnalysis && <span className="shrink-0">🔮</span>}
           <span>{status}</span>
+          {!hasRealAnalysis && (
+            <span className="ml-auto text-[10px] font-medium uppercase tracking-wider opacity-60">
+              Local analysis
+            </span>
+          )}
         </p>
       )}
 
-      {/* Empty state */}
-      {!hasProfile && !isLoading && (
+      {/* Empty state — no profile, no analysis */}
+      {!hasProfile && !isLoading && !hasAnalysisData && (
+        <div className="card p-8 text-center">
+          <div className="mx-auto max-w-sm">
+            <div className="text-5xl mb-4">🔮</div>
+            <h2 className="text-xl font-semibold text-fg mb-2">No analysis yet</h2>
+            <p className="text-sm text-fg-secondary mb-6">
+              Build your career profile first so the mirror has something to reflect on.
+            </p>
+            <Link to="/profile" className="btn-primary-gradient inline-flex">
+              Build profile →
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt to fill profile when user hasn't but analysis exists from local data */}
+      {hasAnalysisData && !hasProfile && !isLoading && (
         <div className="mb-6 card p-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <span className="text-sm text-fg-muted flex items-center gap-2">
             <span className="text-lg float-emoji">👤</span>
@@ -165,7 +348,8 @@ export default function AIAnalysis() {
         </div>
       )}
 
-      {!isLoading && (
+      {/* Only show analysis content when we have data */}
+      {hasAnalysisData && !isLoading && (
         <div className="grid gap-5 lg:grid-cols-2">
           {/* Score card — hero */}
           <article
@@ -207,7 +391,11 @@ export default function AIAnalysis() {
                     Career score
                   </p>
                   <p className="mt-1 text-sm leading-6 text-fg-secondary max-w-md">
-                    You have momentum. The next lift is making your strategic value easier for others to see.
+                    {analysis.careerScore >= 80
+                      ? 'You\'re in a strong position — focus on leverage and visibility.'
+                      : analysis.careerScore >= 60
+                      ? 'You have momentum. The next lift is making your strategic value easier for others to see.'
+                      : 'Build on your foundations. Every small improvement compounds.'}
                   </p>
                 </div>
               </div>
@@ -298,6 +486,34 @@ export default function AIAnalysis() {
               <span className="float-emoji text-lg shrink-0 mt-0.5">🧪</span>
               {analysis.nextExperiment}
             </div>
+            {/* Experiment tracker */}
+            {!experimentTracking.completed && (
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => trackExperiment(true)}
+                  className="btn-outline text-xs px-3 py-1.5"
+                >
+                  ✅ Done — completed it
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBlockerModal(true)
+                  }}
+                  className="btn-ghost text-xs"
+                >
+                  ❌ Didn't get to it
+                </button>
+              </div>
+            )}
+            {experimentTracking.completed && (
+              <div className="mt-4 rounded-[8px] bg-success-bg border border-success/20 px-3.5 py-2 text-xs text-success font-medium flex items-center gap-2">
+                <span>🎉</span>
+                Experiment completed! Score +2. This was added to strengths.
+              </div>
+            )}
+
             <Link
               to="/check-in"
               className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-accent transition hover:text-accent-hover group"
@@ -305,8 +521,39 @@ export default function AIAnalysis() {
               Set up your weekly check-in
               <span className="transition-transform group-hover:translate-x-0.5" aria-hidden="true">→</span>
             </Link>
+
+            {/* Share card */}
+            <button
+              type="button"
+              onClick={() => {
+                const text = `🧠 My Career Mirror Analysis\n\nScore: ${analysis.careerScore}/100\nTop strength: ${analysis.strengths[0] || '—'}\nExperiment: ${analysis.nextExperiment}\n\nBuilt with AI Career Growth Mirror`
+                navigator.clipboard.writeText(text).then(
+                  () => showToast('Analysis copied! Share it anywhere. ✨', 'success'),
+                  () => showToast('Could not copy — select and copy the text manually.', 'info')
+                )
+              }}
+              className="mt-2 inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-accent transition-colors group"
+            >
+              <span className="transition-transform group-hover:scale-110">📋</span>
+              Copy analysis to share
+            </button>
           </article>
         </div>
+      )}
+
+      {/* Reasoning — how the AI reached these conclusions */}
+      {hasAnalysisData && !isLoading && analysis.reasoning && (
+        <details className="mt-6 group">
+          <summary className="cursor-pointer text-sm text-fg-muted hover:text-fg-secondary transition-colors select-none">
+            <span className="inline-flex items-center gap-2">
+              <span className="transition-transform group-open:rotate-90">▶</span>
+              How this analysis was determined
+            </span>
+          </summary>
+          <div className="mt-3 rounded-[10px] border border-border bg-bg-subtle/40 p-4 text-sm leading-6 text-fg-secondary">
+            {analysis.reasoning}
+          </div>
+        </details>
       )}
 
       {/* Bottom CTA */}
@@ -319,12 +566,14 @@ export default function AIAnalysis() {
             <span className="float-emoji">✏️</span>
             Edit profile
           </Link>
-          <Link
-            to="/report"
-            className="btn-ghost"
-          >
-            View growth report →
-          </Link>
+          {hasAnalysisData && (
+            <Link
+              to="/report"
+              className="btn-ghost"
+            >
+              View growth report →
+            </Link>
+          )}
         </div>
       )}
     </section>

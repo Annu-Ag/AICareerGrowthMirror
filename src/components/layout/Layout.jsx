@@ -1,6 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useCareer } from '../../context/CareerContext'
+import usePageTitle from '../../hooks/usePageTitle'
+import JourneyStepper from './JourneyStepper'
+import { generateMockAnalysis } from '../../services/mockAnalysis'
 
 const navigation = [
   { label: 'Profile', to: '/profile', icon: '👤', desc: 'Your career snapshot' },
@@ -9,8 +12,26 @@ const navigation = [
   { label: 'Report', to: '/report', icon: '📈', desc: 'Growth metrics' },
 ]
 
-function MobileMenu({ open, onClose, profile }) {
+const demoProfile = {
+  name: 'Alex Chen',
+  currentRole: 'Senior Product Designer',
+  yearsOfExperience: '6',
+  currentSkills: 'User research, Figma, Design systems, Prototyping, UX strategy',
+  targetRole: 'Design Lead',
+  dreamCompany: 'Stripe',
+  biggestCareerChallenge: 'Making my strategic impact visible to leadership — I do great work but get overlooked for promotions',
+  resumeFileName: '',
+}
+
+function MobileMenu({ open, onClose, profile, resetEverything }) {
   const hasProfile = profile.name.trim().length > 0
+
+  function handleReset() {
+    if (window.confirm('Reset all saved profile, analysis, and check-ins?')) {
+      resetEverything()
+      onClose()
+    }
+  }
 
   return (
     <>
@@ -21,7 +42,7 @@ function MobileMenu({ open, onClose, profile }) {
         />
       )}
       <div
-        className={`fixed inset-y-0 right-0 z-50 w-72 bg-white shadow-xl transition-transform duration-300 ease-out md:hidden ${
+        className={`fixed inset-y-0 right-0 z-50 w-72 bg-bg-card shadow-xl transition-transform duration-300 ease-out md:hidden ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -43,7 +64,7 @@ function MobileMenu({ open, onClose, profile }) {
 
         {hasProfile && (
           <div className="border-b border-border px-5 py-3.5">
-            <p className="text-xs font-medium text-fg-muted">Signed in as</p>
+            <p className="text-xs font-medium text-fg-muted">Your profile</p>
             <p className="mt-0.5 text-sm font-semibold text-fg">{profile.name}</p>
           </div>
         )}
@@ -66,6 +87,13 @@ function MobileMenu({ open, onClose, profile }) {
             </NavLink>
           ))}
           <hr className="my-2 border-border" />
+          <button type="button" onClick={handleReset} className="side-nav-link text-left">
+            <span className="text-base">♻️</span>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">Reset data</span>
+              <span className="text-xs text-fg-muted">Clear the current journey</span>
+            </div>
+          </button>
           <NavLink
             to="/"
             onClick={onClose}
@@ -109,10 +137,17 @@ function Toast({ message, type, onClose }) {
 
 export default function Layout() {
   const { pathname } = useLocation()
-  const { profile, toast: toastState, clearToast } = useCareer()
+  const navigate = useNavigate()
+  const { profile, toast: toastState, clearToast, resetEverything, syncId, cloudStatus, syncToCloud, loadFromCloud, loadDemoData, setOnboardingChoice } = useCareer()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const isLanding = pathname === '/'
+  usePageTitle(pathname)
+
+  // BUG-10: Close mobile menu on route change (covers browser back)
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
 
   // Track scroll for header shadow
   useEffect(() => {
@@ -122,6 +157,13 @@ export default function Layout() {
   }, [])
 
   const hasProfile = profile.name.trim().length > 0
+
+  function handleDemoShortcut() {
+    setOnboardingChoice('demo')
+    const analysis = generateMockAnalysis(demoProfile)
+    loadDemoData(analysis)
+    navigate('/analysis')
+  }
 
   return (
     <div className={`min-h-screen ${isLanding ? 'bg-[#0a0a0a] text-white' : 'bg-bg text-fg'}`}>
@@ -133,8 +175,8 @@ export default function Layout() {
         <header
           className={`sticky top-0 z-30 transition-shadow duration-200 ${
             scrolled
-              ? 'shadow-md bg-white/80'
-              : 'bg-white/60'
+              ? 'shadow-md bg-bg-card/80'
+              : 'bg-bg-card/60'
           } glass`}
         >
           <nav
@@ -176,11 +218,37 @@ export default function Layout() {
                 </span>
               )}
 
+              <button
+                type="button"
+                onClick={handleDemoShortcut}
+                className="hidden sm:inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-2 text-[11px] font-semibold text-fg-muted transition hover:border-accent hover:text-accent"
+              >
+                <span>🧪</span>
+                Skip to demo
+              </button>
+
+              {syncId ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (cloudStatus === 'synced') {
+                      void loadFromCloud()
+                    } else {
+                      void syncToCloud()
+                    }
+                  }}
+                  className="hidden sm:inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-2 text-[11px] font-semibold text-fg-muted transition hover:border-accent hover:text-accent"
+                >
+                  <span>{cloudStatus === 'synced' ? '☁️' : cloudStatus === 'syncing' ? '⏳' : '☁️'}</span>
+                  {cloudStatus === 'synced' ? 'Synced' : cloudStatus === 'syncing' ? 'Syncing' : 'Save cloud'}
+                </button>
+              ) : null}
+
               <NavLink
                 to="/profile"
                 className="btn-primary-gradient hidden sm:inline-flex text-xs px-3.5 py-2"
               >
-                {hasProfile ? 'Dashboard' : 'Get started'}
+                Profile
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
@@ -201,9 +269,10 @@ export default function Layout() {
         </header>
       )}
 
-      <MobileMenu open={mobileOpen} onClose={() => setMobileOpen(false)} profile={profile} />
+      <MobileMenu open={mobileOpen} onClose={() => setMobileOpen(false)} profile={profile} resetEverything={resetEverything} />
 
       <main id="main-content" tabIndex={-1} className={!isLanding ? 'page-enter' : ''}>
+        {!isLanding && <JourneyStepper />}
         <Outlet />
       </main>
 
