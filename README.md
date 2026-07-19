@@ -4,7 +4,18 @@ A judge-ready demo app that turns a career profile, a resume, and weekly check-i
 
 ## Screenshot
 
-![Demo placeholder](https://placehold.co/1200x640?text=Career+Growth+Mirror)
+![alt text](image.png)
+![alt text](image-1.png)
+![alt text](image-2.png)
+![alt text](image-3.png)
+
+
+## Demo Status
+
+The complete user journey and AI career analysis experience are implemented. 
+The application supports Live AI mode and Offline demo mode. 
+
+Some API-dependent responses may use fallback/mock data when the backend API is unavailable, rate-limited, or not configured. This allows the full product experience to be demonstrated end-to-end.
 
 ## Local setup
 
