@@ -17,7 +17,7 @@ A judge-ready demo app that turns a career profile, a resume, and weekly check-i
 ### 404 Page
 ![alt text](image-4.png)
 ### Mirror Cracked Page
-![alt text](image-6.png)
+![alt text](image-7.png)
 
 
 ## Demo Status
@@ -26,6 +26,22 @@ The complete user journey and AI career analysis experience are implemented.
 The application supports Live AI mode and Offline demo mode. 
 
 Some API-dependent responses may use fallback/mock data when the backend API is unavailable, rate-limited, or not configured. This allows the full product experience to be demonstrated end-to-end.
+
+## Error Handling Experience
+
+The application includes two different recovery experiences:
+
+### 404 - Page Not Found
+Shown when users navigate to a route that does not exist.
+Example:
+- `/unknown-page`
+
+This handles incorrect URLs and navigation mistakes.
+
+### Mirror Cracked - Application Error
+Shown when an unexpected application error occurs while using a valid page.
+
+This demonstrates graceful error recovery instead of leaving users with a broken experience. Users can safely return home or reload their journey.
 
 ## Local setup
 
