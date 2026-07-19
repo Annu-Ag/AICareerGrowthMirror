@@ -4,10 +4,20 @@ A judge-ready demo app that turns a career profile, a resume, and weekly check-i
 
 ## Screenshot
 
+### Landing Page
 ![alt text](image.png)
+### Profile  Page
+![alt text](image-5.png)
+### Analysis Page
 ![alt text](image-1.png)
+### Check In Page
 ![alt text](image-2.png)
+### Report Page
 ![alt text](image-3.png)
+### 404 Page
+![alt text](image-4.png)
+### Mirror Cracked Page
+![alt text](image-6.png)
 
 
 ## Demo Status
