@@ -32,7 +32,8 @@ npm run dev
 - Set environment variables:
   - OPENAI_API_KEY
   - PORT=3001
-  - CORS_ORIGINS=https://ai-career-growth-mirror.vercel.app/,http://localhost:5173
+  - CORS_ORIGINS=https://ai-career-growth-mirror.vercel.app/
+  ,http://localhost:5173
 
 ### Vercel (frontend)
 - Deploy the frontend app
