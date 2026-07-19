@@ -32,15 +32,15 @@ npm run dev
 - Set environment variables:
   - OPENAI_API_KEY
   - PORT=3001
-  - CORS_ORIGINS=https://your-app.vercel.app,http://localhost:5173
+  - CORS_ORIGINS=https://ai-career-growth-mirror.vercel.app/,http://localhost:5173
 
 ### Vercel (frontend)
 - Deploy the frontend app
-- Set VITE_API_URL=https://your-api.onrender.com
+- Set VITE_API_URL=https://aicareergrowthmirror.onrender.com
 
 ## Demo script (3 minutes)
 1. Open the profile page and fill in your role, target role, challenge, and skills.
-2. Upload a PDF or TXT resume and note the resume text being used.
+2. Upload a TXT resume and note the resume text being used.
 3. Generate analysis and show the Live AI badge.
 4. Add a check-in, re-analyze with check-ins, and show the experiment update.
 5. Turn off the API or use a bad CORS origin to show the Offline demo fallback banner.
